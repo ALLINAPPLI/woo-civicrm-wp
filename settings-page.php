@@ -1504,7 +1504,7 @@ class WC_CiviCRM_Settings
         check_ajax_referer('test_contribution_creation', 'nonce');
 
         // Check if test contact ID is available
-        $contact_id = 18201;
+        $contact_id = 298731;
         if (!$contact_id) {
             wp_send_json_error(['message' => 'Test contact not found. Please create a test contact first.']);
             return;
@@ -1807,3 +1807,67 @@ class WC_CiviCRM_Settings
 
 // Initialize settings
 new WC_CiviCRM_Settings();
+
+/**
+ * Ajoute une action admin pour lancer l'export
+ * via l'url suivante : wp-admin/admin-post.php?action=export_wc_orders
+ */
+
+add_action('admin_post_export_wc_orders', 'export_wc_orders_to_json');
+
+function export_wc_orders_to_json()
+{
+    if (!current_user_can('manage_woocommerce')) {
+        wp_die('Accès refusé');
+    }
+
+    error_log('EXPORT JSON WC LANCÉ');
+
+    $orders = wc_get_orders([
+            'limit'   => -1,
+            'orderby'=> 'date',
+            'order'  => 'DESC',
+    ]);
+
+    $data = [];
+
+    foreach ($orders as $order) {
+
+        $items = [];
+
+        foreach ($order->get_items() as $item) {
+            $product = $item->get_product();
+
+            $items[] = [
+                    'product_id'   => $product ? $product->get_id() : null,
+                    'name'         => $item->get_name(),
+                    'quantity'     => $item->get_quantity(),
+                    'subtotal'     => $item->get_subtotal(),
+                    'total'        => $item->get_total(),
+            ];
+        }
+
+        $data[] = [
+                'order_id'   => $order->get_id(),
+                'date'       => $order->get_date_created()->date('c'),
+                'status'     => $order->get_status(),
+                'currency'   => $order->get_currency(),
+                'total'      => $order->get_total(),
+                'payment'    => $order->get_payment_method(),
+                'customer'   => [
+                        'first_name' => $order->get_billing_first_name(),
+                        'last_name'  => $order->get_billing_last_name(),
+                        'email'      => $order->get_billing_email(),
+                ],
+                'items'      => $items,
+        ];
+    }
+
+    $filename = 'commandes-' . date('Y-m-d-H-i-s') . '.json';
+
+    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Disposition: attachment; filename=' . $filename);
+
+    echo json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    exit;
+}

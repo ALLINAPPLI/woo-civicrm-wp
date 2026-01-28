@@ -279,7 +279,7 @@ class WooCommerceCiviCRMIntegration
         // Get the configured financial type ID - validation will happen in create_civicrm_contribution
         $financial_type_id = (int)get_option('wc_civicrm_contribution_type_id', 1);
         $this->log_debug("Using financial type ID: $financial_type_id for order #$order_id");
-        
+
         // Prepare contribution data
         $contribution_data = [
             'contact_id' => (int)$contact_id,
@@ -432,7 +432,7 @@ class WooCommerceCiviCRMIntegration
                 'total_amount' => $contribution_data['total_amount'],
                 'currency' => $contribution_data['currency'],
                 // Simpler source text to avoid potential character issues
-                'source' => 'WooCommerce Order #' . ($contribution_data['order_id'] ?? ''),
+                'source' => ($contribution_data['source'] ?? ''), // modif Dewy pour PRESTA ASPAS
                 // Use current date if not provided
                 'receive_date' => $contribution_data['receive_date'] ?? date('Y-m-d H:i:s'),
                 // Default values that work in test method
@@ -440,7 +440,10 @@ class WooCommerceCiviCRMIntegration
                 'contribution_status_id' => 1, // Completed
                 'is_test' => 0
             ];
-            
+
+            error_log('message contribution data: ' . json_encode($contribution_data));
+            error_log('message simplified data: ' . json_encode($simplified_data));
+
             $this->log_debug("Using simplified contribution data: " . json_encode($simplified_data));
             
             // Try to create the contribution
@@ -543,8 +546,9 @@ class WooCommerceCiviCRMIntegration
 
 
             // Search for existing contact by email first
+            // debut modif Dewy pour PRESTA ASPAS
             $email_search_params = [
-                'select' => ['id', 'contact_type', 'first_name', 'last_name'],
+                'select' => ['id', 'contact_id.contact_type', 'contact_id.first_name', 'contact_id.last_name', 'contact_id'],
                 'where' => [
                     ['email', '=', $order_data['billing_email']]
                 ],
@@ -561,12 +565,16 @@ class WooCommerceCiviCRMIntegration
                 // Log found contact details
                 WC_CiviCRM_Logger::log_success('contact_found_by_email', [
                     'message' => 'Existing contact located by email',
-                    'contact_id' => $existing_contact['id'],
-                    'existing_name' => ($existing_contact['first_name'] ?? '') . ' ' . ($existing_contact['last_name'] ?? '')
+                    'contact_id' => $existing_contact['contact_id'],
+                    'existing_name' => ($existing_contact['contact_id.first_name'] ?? '') . ' ' . ($existing_contact['contact_id.last_name'] ?? '')
                 ]);
 
-                return $existing_contact['id'];
+                //error_log('message existing contact id : ' . json_encode($existing_contact['contact_id']));
+                //error_log('message existing contact: ' . json_encode($existing_contact));
+
+                return $existing_contact['contact_id'];
             }
+            // fin modif Dewy pour PRESTA ASPAS
 
             // If no contact found by email, search by name
             $name_search_params = [
