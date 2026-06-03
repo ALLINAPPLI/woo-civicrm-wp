@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: WooCommerce to CiviCRM Integration
- * Description: Automatically creates CiviCRM orders from WooCommerce orders
+ * Plugin Name: FORK WooCommerce to CiviCRM Integration
+ * Description: FORK AIA Automatically creates CiviCRM orders from WooCommerce orders
  * Version: 1.0
  * Author: Loic Moncany
  * Author URI: https://iclick.space
@@ -288,7 +288,7 @@ class WooCommerceCiviCRMIntegration
             'currency' => $order->get_currency(),
             'source' => 'WooCommerce Order #' . $order_id,
             'receive_date' => $order->get_date_created()->date('Y-m-d H:i:s'),
-            'payment_instrument_id' => 1, // Credit Card
+            'payment_instrument_id' => 2, // modif Dewy ASPAS changement du payment_instrument_id à 2 -> Carte Bancaire
             'is_pay_later' => 0,
             'is_test' => 0,
             'contribution_status_id' => 1, // Completed
