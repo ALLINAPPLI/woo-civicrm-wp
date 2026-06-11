@@ -1532,7 +1532,7 @@ class WC_CiviCRM_Settings
             'currency' => 'USD',
             'source' => 'WooCommerce CiviCRM Test',
             'receive_date' => date('Y-m-d H:i:s'),
-            'payment_instrument_id' => 1, // Credit Card
+            'payment_instrument_id' => 2, // Credit Card
             'is_pay_later' => 0,
             'is_test' => 1,
             'contribution_status_id' => 1 // Completed
