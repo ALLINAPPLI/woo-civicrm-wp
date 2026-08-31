@@ -1,5 +1,5 @@
 jQuery(document).ready(function($) {
-  console.log("CiviCRM admin script loaded TEST");
+  console.log("CiviCRM ADMIN-SCRIPT.JS root loaded"); // Add debug logging
     // Test CiviCRM Connection
     $('#test-civicrm-connection').on('click', function(e) {
         e.preventDefault();
