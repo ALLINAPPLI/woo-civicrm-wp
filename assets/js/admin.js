@@ -1,4 +1,5 @@
 jQuery(document).ready(function($) {
+  console.log("CiviCRM ADMIN JS script loaded");
       // Field mapping functionality
       $('#add-mapping').click(function() {
         const newRow = `

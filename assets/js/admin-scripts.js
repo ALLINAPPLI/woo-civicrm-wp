@@ -1,5 +1,5 @@
 jQuery(document).ready(function ($) {
-  console.log("CiviCRM admin script loaded"); // Add debug logging
+  console.log("CiviCRM ADMIN-SCRIPT.JS root loaded"); // Add debug logging
 
   // Tab functionality - simplified
   function setupTabs() {
