@@ -282,7 +282,8 @@ class WooCommerceCiviCRMIntegration
         $financial_type_id = (int)get_option('wc_civicrm_contribution_type_id', 1);
         $this->log_debug("Using financial type ID: $financial_type_id for order #$order_id");
 
-        // Prepare contribution data
+        // Convertit le moyen de paiement WooCommerce (id machine) en payment_instrument_id CiviCRM
+        // via l'option configurée dans l'onglet Mapping Payment.
         $payment_instrument_id = $this->map_payment_method($order->get_payment_method());
         $contribution_data = [
             'contact_id' => (int)$contact_id,
@@ -337,7 +338,14 @@ class WooCommerceCiviCRMIntegration
         }
     }
 
-    // Helper method to map WooCommerce payment methods to CiviCRM payment instruments
+    /**
+     * Mappe un gateway WooCommerce vers un payment_instrument_id CiviCRM.
+     * Source : option wc_civicrm_payment_method_map (onglet Mapping Payment).
+     * Fallback : 2 (Carte Bancaire) si aucun mapping trouvé.
+     *
+     * @param string $wc_payment_method Id machine WC (ex. stripe, bacs, paypal)
+     * @return int
+     */
     private function map_payment_method($wc_payment_method)
     {
         $default = 2; // Carte Bancaire (fallback historique ASPAS)

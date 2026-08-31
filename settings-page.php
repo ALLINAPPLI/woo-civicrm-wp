@@ -151,6 +151,7 @@ class WC_CiviCRM_Settings
             'fetch_fields_nonce' => wp_create_nonce('fetch_civicrm_fields'),
             'fetch_financial_types_nonce' => wp_create_nonce('fetch_financial_types'),
             'fetch_payment_instruments_nonce' => wp_create_nonce('fetch_payment_instruments'),
+            // Données pour l'UI Mapping Payment (consommées par admin-scripts.js)
             'wc_payment_methods' => $this->get_enabled_wc_payment_methods(),
             'payment_instruments' => $this->get_saved_payment_instruments(),
         ]);
@@ -221,6 +222,8 @@ class WC_CiviCRM_Settings
         register_setting('wc_civicrm_settings', 'wc_civicrm_field_mappings', [
             'sanitize_callback' => [$this, 'sanitize_field_mappings']
         ]);
+        // Mapping moyens de paiement WooCommerce → payment_instrument_id CiviCRM
+        // Stocké sous forme : [ 'stripe' => 2, 'bacs' => 4, ... ]
         register_setting('wc_civicrm_settings', 'wc_civicrm_payment_method_map', [
             'sanitize_callback' => [$this, 'sanitize_payment_method_map']
         ]);
@@ -259,7 +262,9 @@ class WC_CiviCRM_Settings
     }
 
     /**
-     * Sanitize WooCommerce → CiviCRM payment method mappings.
+     * Nettoie le mapping paiement avant sauvegarde WP.
+     * Transforme les lignes du formulaire en tableau associatif :
+     * id machine WC (ex. "bacs") => value CiviCRM (ex. 4).
      *
      * @param mixed $mappings
      * @return array<string, int> wc_gateway_id => payment_instrument_id
@@ -276,6 +281,7 @@ class WC_CiviCRM_Settings
                 continue;
             }
             $wc_method = isset($mapping['wc_method']) ? sanitize_text_field($mapping['wc_method']) : '';
+            // "value" de l'OptionValue CiviCRM (pas l'id de la ligne option_value)
             $instrument = isset($mapping['civicrm_instrument']) ? absint($mapping['civicrm_instrument']) : 0;
             if ($wc_method === '' || $instrument <= 0) {
                 continue;
@@ -433,7 +439,7 @@ class WC_CiviCRM_Settings
                         </div>
                     </div>
 
-                    <!-- Payment method mapping -->
+                    <!-- Onglet : mapping gateway WooCommerce ↔ instrument de paiement CiviCRM -->
                     <div id="tab-payment-mapping" class="wc-civicrm-tab-content">
                         <div class="wc-civicrm-section">
                             <h2>Mapping Payment</h2>
@@ -727,7 +733,8 @@ class WC_CiviCRM_Settings
     }
 
     /**
-     * Enabled WooCommerce payment gateways (id => title).
+     * Gateways WooCommerce activées uniquement (id machine => titre affiché).
+     * Ex. [ 'bacs' => 'Virement bancaire', 'stripe' => 'Carte bancaire' ]
      *
      * @return array<string, string>
      */
@@ -748,15 +755,18 @@ class WC_CiviCRM_Settings
     }
 
     /**
-     * Render payment method mapping UI (WooCommerce ↔ CiviCRM).
+     * Affiche le tableau de mapping (onglet Mapping Payment).
+     * La logique JS (ajout/suppression de lignes, refresh AJAX) est dans assets/js/admin-scripts.js.
      */
     public function payment_method_mappings_callback()
     {
+        // Option WP : correspondances déjà enregistrées
         $mappings = get_option('wc_civicrm_payment_method_map', []);
         if (!is_array($mappings)) {
             $mappings = [];
         }
         $wc_methods = $this->get_enabled_wc_payment_methods();
+        // Cache local des instruments CiviCRM (rafraîchi via le bouton Refresh)
         $instruments = $this->get_saved_payment_instruments();
         ?>
         <div class="wc-civicrm-field-mappings-wrapper">
@@ -801,6 +811,7 @@ class WC_CiviCRM_Settings
                                                 <?php echo esc_html($title . ' (' . $id . ')'); ?>
                                             </option>
                                         <?php endforeach; ?>
+                                        <?php // Conserve un mapping si la gateway a été désactivée depuis ?>
                                         <?php if ($wc_method && !isset($wc_methods[$wc_method])) : ?>
                                             <option value="<?php echo esc_attr($wc_method); ?>" selected>
                                                 <?php echo esc_html($wc_method . ' (désactivé)'); ?>
@@ -1971,7 +1982,8 @@ class WC_CiviCRM_Settings
     }
 
     /**
-     * Fetch payment instruments from CiviCRM (OptionValue group payment_instrument).
+     * Récupère les instruments de paiement CiviCRM via API4 OptionValue.
+     * Le champ utile pour Contribution.payment_instrument_id est "value" (pas "id").
      *
      * @return array|array{error:bool,message:string}
      */
@@ -1985,6 +1997,7 @@ class WC_CiviCRM_Settings
         }
 
         try {
+            // Groupe d'options natif CiviCRM : payment_instrument
             $response = $this->send_civicrm_request('OptionValue', 'get', [
                 'select' => ['value', 'label', 'name'],
                 'where' => [
@@ -2015,7 +2028,8 @@ class WC_CiviCRM_Settings
     }
 
     /**
-     * Get saved payment instruments, fetch from CiviCRM if empty.
+     * Lit le cache WP des instruments ; si vide, tente un fetch CiviCRM immédiat.
+     * Cache option : wc_civicrm_payment_instruments
      *
      * @return array<int, array{value:int|string,label:string,name?:string}>
      */
@@ -2045,7 +2059,8 @@ class WC_CiviCRM_Settings
     }
 
     /**
-     * AJAX handler for fetching CiviCRM payment instruments.
+     * AJAX : rafraîchit la liste des payment instruments depuis CiviCRM
+     * et met à jour l'option wc_civicrm_payment_instruments.
      */
     public function ajax_fetch_payment_instruments()
     {

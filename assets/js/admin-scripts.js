@@ -455,12 +455,18 @@ jQuery(document).ready(function ($) {
     });
   });
 
-  // Payment method mapping (WooCommerce ↔ CiviCRM payment instruments)
+  /**
+   * Mapping Payment — onglet settings.
+   * Données injectées via wp_localize_script (wc_payment_methods, payment_instruments).
+   * Persistées côté PHP dans l'option wc_civicrm_payment_method_map au Save Settings.
+   */
   (function initPaymentMethodMapping() {
+    // Sortir si l'onglet n'est pas présent sur la page
     if (!$("#payment-method-mappings-table").length) {
       return;
     }
 
+    // Listes fournies par PHP (settings-page.php → enqueue_admin_scripts)
     let wcMethods = wc_civicrm_admin_params.wc_payment_methods || {};
     let instruments = wc_civicrm_admin_params.payment_instruments || [];
 
@@ -473,6 +479,7 @@ jQuery(document).ready(function ($) {
         .replace(/'/g, "&#039;");
     }
 
+    // Options du select WooCommerce (id machine + titre)
     function buildWcOptions(selected) {
       let html = '<option value="">Sélectionner…</option>';
       Object.keys(wcMethods).forEach(function (id) {
@@ -489,6 +496,7 @@ jQuery(document).ready(function ($) {
       return html;
     }
 
+    // Options du select CiviCRM (label + value = payment_instrument_id)
     function buildInstrumentOptions(selected) {
       let html = '<option value="">Sélectionner…</option>';
       (instruments || []).forEach(function (item) {
@@ -505,6 +513,7 @@ jQuery(document).ready(function ($) {
       return html;
     }
 
+    // Reconstruit tous les selects instruments après un Refresh AJAX
     function refreshInstrumentSelects() {
       $(".civicrm-payment-instrument-select").each(function () {
         const current = $(this).val();
@@ -546,10 +555,12 @@ jQuery(document).ready(function ($) {
       $(this).closest("tr").remove();
     });
 
+    // Une ligne vide par défaut pour faciliter la première configuration
     if ($("#payment-method-mappings-table tbody tr").length === 0) {
       $("#add-payment-mapping").trigger("click");
     }
 
+    // Charge / rafraîchit les OptionValue payment_instrument depuis CiviCRM
     $("#refresh-payment-instruments").on("click", function (e) {
       e.preventDefault();
       const $button = $(this);
