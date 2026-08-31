@@ -23,6 +23,7 @@ $plugin_dir = plugin_dir_path(__FILE__);
 require_once plugin_dir_path(__FILE__) . 'logging.php';
 require_once plugin_dir_path(__FILE__) . 'send-civicrm-request.php';
 require_once plugin_dir_path(__FILE__) . 'settings-page.php';
+require_once plugin_dir_path(__FILE__) . 'required-billing-fields.php';
 
 // Check for required plugins
 register_activation_hook(__FILE__, function () {
@@ -82,7 +83,8 @@ add_action('plugins_loaded', function () {
         $required_files = [
             $plugin_dir . 'logging.php' => 'Logging',
             $plugin_dir . 'send-civicrm-request.php' => 'API Request',
-            $plugin_dir . 'settings-page.php' => 'Settings Page'
+            $plugin_dir . 'settings-page.php' => 'Settings Page',
+            $plugin_dir . 'required-billing-fields.php' => 'Required Billing Fields'
         ];
 
         $missing_files = [];
@@ -102,9 +104,11 @@ add_action('plugins_loaded', function () {
 
         // Load settings page after trait and logger are loaded
         require_once $plugin_dir . 'settings-page.php';
+        require_once $plugin_dir . 'required-billing-fields.php';
 
         // Initialize plugin after all dependencies are loaded
         new WooCommerceCiviCRMIntegration();
+        new WC_CiviCRM_Required_Billing_Fields();
     } else {
         add_action('admin_notices', function () {
             echo '<div class="error"><p>WooCommerce to CiviCRM plugin requires WooCommerce to be installed and active.</p></div>';
