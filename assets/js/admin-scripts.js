@@ -454,4 +454,138 @@ jQuery(document).ready(function ($) {
       },
     });
   });
+
+  // Payment method mapping (WooCommerce ↔ CiviCRM payment instruments)
+  (function initPaymentMethodMapping() {
+    if (!$("#payment-method-mappings-table").length) {
+      return;
+    }
+
+    let wcMethods = wc_civicrm_admin_params.wc_payment_methods || {};
+    let instruments = wc_civicrm_admin_params.payment_instruments || [];
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function buildWcOptions(selected) {
+      let html = '<option value="">Sélectionner…</option>';
+      Object.keys(wcMethods).forEach(function (id) {
+        const sel = id === selected ? " selected" : "";
+        html +=
+          '<option value="' +
+          escapeHtml(id) +
+          '"' +
+          sel +
+          ">" +
+          escapeHtml(wcMethods[id] + " (" + id + ")") +
+          "</option>";
+      });
+      return html;
+    }
+
+    function buildInstrumentOptions(selected) {
+      let html = '<option value="">Sélectionner…</option>';
+      (instruments || []).forEach(function (item) {
+        const sel = String(item.value) === String(selected) ? " selected" : "";
+        html +=
+          '<option value="' +
+          escapeHtml(item.value) +
+          '"' +
+          sel +
+          ">" +
+          escapeHtml(item.label + " (#" + item.value + ")") +
+          "</option>";
+      });
+      return html;
+    }
+
+    function refreshInstrumentSelects() {
+      $(".civicrm-payment-instrument-select").each(function () {
+        const current = $(this).val();
+        $(this).html(buildInstrumentOptions(current));
+        if (current) {
+          $(this).val(current);
+        }
+      });
+    }
+
+    function getNewPaymentRow() {
+      const rowId = "new_" + Math.random().toString(36).substr(2, 9);
+      return `
+        <tr>
+          <td>
+            <select name="wc_civicrm_payment_method_map[${rowId}][wc_method]" class="regular-text">
+              ${buildWcOptions("")}
+            </select>
+          </td>
+          <td>
+            <select name="wc_civicrm_payment_method_map[${rowId}][civicrm_instrument]" class="regular-text civicrm-payment-instrument-select">
+              ${buildInstrumentOptions("")}
+            </select>
+          </td>
+          <td>
+            <button type="button" class="button button-small remove-payment-mapping">
+              <span class="dashicons dashicons-trash"></span>
+            </button>
+          </td>
+        </tr>
+      `;
+    }
+
+    $("#add-payment-mapping").on("click", function () {
+      $("#payment-method-mappings-table tbody").append(getNewPaymentRow());
+    });
+
+    $(document).on("click", ".remove-payment-mapping", function () {
+      $(this).closest("tr").remove();
+    });
+
+    if ($("#payment-method-mappings-table tbody tr").length === 0) {
+      $("#add-payment-mapping").trigger("click");
+    }
+
+    $("#refresh-payment-instruments").on("click", function (e) {
+      e.preventDefault();
+      const $button = $(this);
+      const $message = $("#payment-instruments-message");
+      $button.prop("disabled", true);
+      $message.text("Chargement…");
+
+      $.ajax({
+        url: ajaxurl,
+        type: "POST",
+        data: {
+          action: "fetch_payment_instruments",
+          nonce: wc_civicrm_admin_params.fetch_payment_instruments_nonce,
+        },
+        success: function (response) {
+          $button.prop("disabled", false);
+          if (response.success && response.data.instruments) {
+            instruments = response.data.instruments;
+            wc_civicrm_admin_params.payment_instruments = instruments;
+            refreshInstrumentSelects();
+            $message.text(
+              response.data.message || "Instruments mis à jour."
+            );
+          } else {
+            $message.text(
+              response.data && response.data.message
+                ? response.data.message
+                : "Erreur"
+            );
+          }
+        },
+        error: function () {
+          $button.prop("disabled", false);
+          $message.text("Erreur AJAX");
+        },
+      });
+    });
+  })();
 });

@@ -269,7 +269,7 @@ class WooCommerceCiviCRMIntegration
         // Extract order data for contact creation
         $order_data = $this->extract_order_data($order);
         
-        error_log('message order data: ' . json_encode($order_data));
+        // error_log('message order data: ' . json_encode($order_data));
         
         // Get or create contact
         $contact_id = $this->get_or_create_contact($order_data);
@@ -283,6 +283,7 @@ class WooCommerceCiviCRMIntegration
         $this->log_debug("Using financial type ID: $financial_type_id for order #$order_id");
 
         // Prepare contribution data
+        $payment_instrument_id = $this->map_payment_method($order->get_payment_method());
         $contribution_data = [
             'contact_id' => (int)$contact_id,
             'financial_type_id' => (int)$financial_type_id,
@@ -290,11 +291,18 @@ class WooCommerceCiviCRMIntegration
             'currency' => $order->get_currency(),
             'source' => 'WooCommerce Order #' . $order_id,
             'receive_date' => $order->get_date_created()->date('Y-m-d H:i:s'),
-            'payment_instrument_id' => 2, // modif Dewy ASPAS changement du payment_instrument_id à 2 -> Carte Bancaire
+            'payment_instrument_id' => $payment_instrument_id,
             'is_pay_later' => 0,
             'is_test' => 0,
             'contribution_status_id' => 1, // Completed
         ];
+        
+        $this->log_debug(sprintf(
+            'Order #%d payment method "%s" mapped to payment_instrument_id %d',
+            $order_id,
+            $order->get_payment_method(),
+            $payment_instrument_id
+        ));
         
         // Create contribution in CiviCRM
         $contribution_id = $this->create_civicrm_contribution($contribution_data);
@@ -332,16 +340,18 @@ class WooCommerceCiviCRMIntegration
     // Helper method to map WooCommerce payment methods to CiviCRM payment instruments
     private function map_payment_method($wc_payment_method)
     {
-        // Default to 1 (Credit Card) if no mapping is found
-        $payment_method_map = [
-            'stripe' => 1,  // Credit Card
-            'paypal' => 2,  // Check (adjust based on your CiviCRM configuration)
-            'bacs' => 4,    // Bank Transfer
-            'cod' => 5,     // Cash
-            // Add more mappings as needed
-        ];
+        $default = 2; // Carte Bancaire (fallback historique ASPAS)
+        $payment_method_map = get_option('wc_civicrm_payment_method_map', []);
 
-        return $payment_method_map[$wc_payment_method] ?? 1;
+        if (!is_array($payment_method_map) || empty($payment_method_map)) {
+            return $default;
+        }
+
+        if ($wc_payment_method !== '' && isset($payment_method_map[$wc_payment_method])) {
+            return (int) $payment_method_map[$wc_payment_method];
+        }
+
+        return $default;
     }
 
     private function extract_order_data($order)
@@ -437,8 +447,7 @@ class WooCommerceCiviCRMIntegration
                 'source' => ($contribution_data['source'] ?? ''), // modif Dewy pour PRESTA ASPAS
                 // Use current date if not provided
                 'receive_date' => $contribution_data['receive_date'] ?? date('Y-m-d H:i:s'),
-                // Default values that work in test method
-                'payment_instrument_id' => 2, // modif Dewy ASPAS changement du payment_instrument_id à 2 -> Carte Bancaire
+                'payment_instrument_id' => (int) ($contribution_data['payment_instrument_id'] ?? 2),
                 'contribution_status_id' => 1, // Completed
                 'is_test' => 0
             ];
@@ -472,7 +481,7 @@ class WooCommerceCiviCRMIntegration
                         'currency' => $simplified_data['currency'],
                         'source' => 'WooCommerce Test',
                         'receive_date' => date('Y-m-d H:i:s'),
-                        'payment_instrument_id' => 2, // modif Dewy ASPAS changement du payment_instrument_id à 2 -> Carte Bancaire
+                        'payment_instrument_id' => (int) ($simplified_data['payment_instrument_id'] ?? 2),
                         'contribution_status_id' => 1,
                         'is_test' => 0
                     ];

@@ -100,6 +100,7 @@ class WC_CiviCRM_Settings
         
         // Register AJAX handlers
         add_action('wp_ajax_fetch_financial_types', array($this, 'ajax_fetch_financial_types'));
+        add_action('wp_ajax_fetch_payment_instruments', array($this, 'ajax_fetch_payment_instruments'));
         add_action('wp_ajax_test_civicrm_connection', array($this, 'test_connection'));
         add_action('wp_ajax_test_contact_creation', array($this, 'test_contact_creation'));
         add_action('wp_ajax_test_contribution_creation', array($this, 'test_contribution_creation'));
@@ -139,7 +140,7 @@ class WC_CiviCRM_Settings
             'wc-civicrm-admin-scripts',
             $plugin_url . 'assets/js/admin-scripts.js',
             ['jquery'],
-            '1.0',
+            '1.1',
             true
         );
 
@@ -148,7 +149,10 @@ class WC_CiviCRM_Settings
             'test_contact_creation_nonce' => wp_create_nonce('test_contact_creation'),
             'test_contribution_creation_nonce' => wp_create_nonce('test_contribution_creation'),
             'fetch_fields_nonce' => wp_create_nonce('fetch_civicrm_fields'),
-            'fetch_financial_types_nonce' => wp_create_nonce('fetch_financial_types')
+            'fetch_financial_types_nonce' => wp_create_nonce('fetch_financial_types'),
+            'fetch_payment_instruments_nonce' => wp_create_nonce('fetch_payment_instruments'),
+            'wc_payment_methods' => $this->get_enabled_wc_payment_methods(),
+            'payment_instruments' => $this->get_saved_payment_instruments(),
         ]);
     }
 
@@ -217,6 +221,9 @@ class WC_CiviCRM_Settings
         register_setting('wc_civicrm_settings', 'wc_civicrm_field_mappings', [
             'sanitize_callback' => [$this, 'sanitize_field_mappings']
         ]);
+        register_setting('wc_civicrm_settings', 'wc_civicrm_payment_method_map', [
+            'sanitize_callback' => [$this, 'sanitize_payment_method_map']
+        ]);
         register_setting('wc_civicrm_settings', 'wc_civicrm_debug_mode');
         register_setting('wc_civicrm_settings', 'wc_civicrm_connection_status');
         register_setting('wc_civicrm_settings', 'wc_civicrm_contribution_type_id');
@@ -246,6 +253,34 @@ class WC_CiviCRM_Settings
                 'civicrm' => sanitize_text_field($mapping['civicrm']),
                 'type' => sanitize_text_field($mapping['type'])
             ];
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * Sanitize WooCommerce → CiviCRM payment method mappings.
+     *
+     * @param mixed $mappings
+     * @return array<string, int> wc_gateway_id => payment_instrument_id
+     */
+    public function sanitize_payment_method_map($mappings)
+    {
+        if (!is_array($mappings)) {
+            return [];
+        }
+
+        $sanitized = [];
+        foreach ($mappings as $mapping) {
+            if (!is_array($mapping)) {
+                continue;
+            }
+            $wc_method = isset($mapping['wc_method']) ? sanitize_text_field($mapping['wc_method']) : '';
+            $instrument = isset($mapping['civicrm_instrument']) ? absint($mapping['civicrm_instrument']) : 0;
+            if ($wc_method === '' || $instrument <= 0) {
+                continue;
+            }
+            $sanitized[$wc_method] = $instrument;
         }
 
         return $sanitized;
@@ -349,6 +384,7 @@ class WC_CiviCRM_Settings
                     <nav class="wc-civicrm-tabs">
                         <button type="button" class="wc-civicrm-tab-button active" data-tab="tab-connection">Connection</button>
                         <button type="button" class="wc-civicrm-tab-button" data-tab="tab-mappings">Field Mappings</button>
+                        <button type="button" class="wc-civicrm-tab-button" data-tab="tab-payment-mapping">Mapping Payment</button>
                         <button type="button" class="wc-civicrm-tab-button" data-tab="tab-contribution">Contribution</button>
                         <button type="button" class="wc-civicrm-tab-button" data-tab="tab-testing">Testing</button>
                         <button type="button" class="wc-civicrm-tab-button" data-tab="tab-debug">Debug</button>
@@ -396,8 +432,17 @@ class WC_CiviCRM_Settings
                             <?php $this->field_mappings_callback(); ?>
                         </div>
                     </div>
+
+                    <!-- Payment method mapping -->
+                    <div id="tab-payment-mapping" class="wc-civicrm-tab-content">
+                        <div class="wc-civicrm-section">
+                            <h2>Mapping Payment</h2>
+                            <p>Associez chaque moyen de paiement WooCommerce activé à un instrument de paiement CiviCRM.</p>
+                            <?php $this->payment_method_mappings_callback(); ?>
+                        </div>
+                    </div>
                     
-                    <!-- Third tab: Contribution Settings -->
+                    <!-- Contribution Settings -->
                     <div id="tab-contribution" class="wc-civicrm-tab-content">
                         <div class="wc-civicrm-section">
                             <h2>CiviCRM Contribution Settings</h2>
@@ -677,6 +722,121 @@ class WC_CiviCRM_Settings
                     <?php endforeach; ?>
                 </tbody>
             </table>
+        </div>
+        <?php
+    }
+
+    /**
+     * Enabled WooCommerce payment gateways (id => title).
+     *
+     * @return array<string, string>
+     */
+    public function get_enabled_wc_payment_methods()
+    {
+        $methods = [];
+        if (!function_exists('WC') || !WC()->payment_gateways()) {
+            return $methods;
+        }
+
+        foreach (WC()->payment_gateways()->payment_gateways() as $id => $gateway) {
+            if ($gateway->enabled === 'yes') {
+                $methods[$id] = $gateway->get_title();
+            }
+        }
+
+        return $methods;
+    }
+
+    /**
+     * Render payment method mapping UI (WooCommerce ↔ CiviCRM).
+     */
+    public function payment_method_mappings_callback()
+    {
+        $mappings = get_option('wc_civicrm_payment_method_map', []);
+        if (!is_array($mappings)) {
+            $mappings = [];
+        }
+        $wc_methods = $this->get_enabled_wc_payment_methods();
+        $instruments = $this->get_saved_payment_instruments();
+        ?>
+        <div class="wc-civicrm-field-mappings-wrapper">
+            <div class="field-mappings-header">
+                <p>Choisissez un moyen de paiement WooCommerce activé et l’instrument CiviCRM correspondant. Cliquez sur « Refresh Instruments » pour recharger la liste CiviCRM.</p>
+                <div class="field-mappings-actions">
+                    <button type="button" id="refresh-payment-instruments" class="button button-secondary">
+                        <span class="dashicons dashicons-update"></span> Refresh Instruments
+                    </button>
+                    <span id="payment-instruments-message"></span>
+                </div>
+            </div>
+
+            <?php if (empty($wc_methods)) : ?>
+                <div class="notice notice-warning inline">
+                    <p>Aucun moyen de paiement WooCommerce activé. Activez-en au moins un dans WooCommerce → Réglages → Paiements.</p>
+                </div>
+            <?php endif; ?>
+
+            <div class="field-mappings-table-container">
+                <table class="wp-list-table widefat fixed striped" id="payment-method-mappings-table">
+                    <thead>
+                        <tr>
+                            <th>WooCommerce Payment Method</th>
+                            <th>CiviCRM Payment Instrument</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php
+                        $row_index = 0;
+                        foreach ($mappings as $wc_method => $instrument_id) :
+                            $row_key = 'row_' . $row_index;
+                            $row_index++;
+                            ?>
+                            <tr>
+                                <td>
+                                    <select name="wc_civicrm_payment_method_map[<?php echo esc_attr($row_key); ?>][wc_method]" class="regular-text">
+                                        <option value="">Sélectionner…</option>
+                                        <?php foreach ($wc_methods as $id => $title) : ?>
+                                            <option value="<?php echo esc_attr($id); ?>" <?php selected($id, $wc_method); ?>>
+                                                <?php echo esc_html($title . ' (' . $id . ')'); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                        <?php if ($wc_method && !isset($wc_methods[$wc_method])) : ?>
+                                            <option value="<?php echo esc_attr($wc_method); ?>" selected>
+                                                <?php echo esc_html($wc_method . ' (désactivé)'); ?>
+                                            </option>
+                                        <?php endif; ?>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select name="wc_civicrm_payment_method_map[<?php echo esc_attr($row_key); ?>][civicrm_instrument]" class="regular-text civicrm-payment-instrument-select">
+                                        <option value="">Sélectionner…</option>
+                                        <?php foreach ($instruments as $instrument) : ?>
+                                            <option value="<?php echo esc_attr($instrument['value']); ?>" <?php selected((int) $instrument['value'], (int) $instrument_id); ?>>
+                                                <?php echo esc_html($instrument['label'] . ' (#' . $instrument['value'] . ')'); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </td>
+                                <td>
+                                    <button type="button" class="button button-small remove-payment-mapping">
+                                        <span class="dashicons dashicons-trash"></span>
+                                    </button>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3">
+                                <button type="button" id="add-payment-mapping" class="button">
+                                    <span class="dashicons dashicons-plus"></span> Add New Mapping
+                                </button>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
         </div>
         <?php
     }
@@ -1807,6 +1967,118 @@ class WC_CiviCRM_Settings
         wp_send_json_success([
             'message' => 'Financial types refreshed successfully',
             'types' => $options
+        ]);
+    }
+
+    /**
+     * Fetch payment instruments from CiviCRM (OptionValue group payment_instrument).
+     *
+     * @return array|array{error:bool,message:string}
+     */
+    public function get_payment_instruments()
+    {
+        if (empty($this->civicrm_url) || empty($this->auth_token)) {
+            return [
+                'error' => true,
+                'message' => 'CiviCRM credentials not set',
+            ];
+        }
+
+        try {
+            $response = $this->send_civicrm_request('OptionValue', 'get', [
+                'select' => ['value', 'label', 'name'],
+                'where' => [
+                    ['option_group_id:name', '=', 'payment_instrument'],
+                    ['is_active', '=', true],
+                ],
+                'orderBy' => ['weight' => 'ASC'],
+                'checkPermissions' => false,
+            ]);
+        } catch (Exception $e) {
+            $this->log_error('Failed to fetch payment instruments: ' . $e->getMessage());
+            return [
+                'error' => true,
+                'message' => 'Failed to connect to CiviCRM: ' . $e->getMessage(),
+            ];
+        }
+
+        if (!$response || isset($response['error_message']) || !isset($response['values'])) {
+            $message = $response['error_message'] ?? 'Invalid response from CiviCRM';
+            $this->log_error('Failed to fetch payment instruments: ' . $message);
+            return [
+                'error' => true,
+                'message' => $message,
+            ];
+        }
+
+        return $response['values'];
+    }
+
+    /**
+     * Get saved payment instruments, fetch from CiviCRM if empty.
+     *
+     * @return array<int, array{value:int|string,label:string,name?:string}>
+     */
+    public function get_saved_payment_instruments()
+    {
+        $instruments = get_option('wc_civicrm_payment_instruments', []);
+        if (!is_array($instruments)) {
+            $instruments = [];
+        }
+
+        if (empty($instruments) && !empty($this->civicrm_url) && !empty($this->auth_token)) {
+            $fetched = $this->get_payment_instruments();
+            if (!isset($fetched['error']) && !empty($fetched)) {
+                $instruments = [];
+                foreach ($fetched as $item) {
+                    $instruments[] = [
+                        'value' => $item['value'],
+                        'label' => $item['label'] ?? ($item['name'] ?? ''),
+                        'name' => $item['name'] ?? '',
+                    ];
+                }
+                update_option('wc_civicrm_payment_instruments', $instruments);
+            }
+        }
+
+        return $instruments;
+    }
+
+    /**
+     * AJAX handler for fetching CiviCRM payment instruments.
+     */
+    public function ajax_fetch_payment_instruments()
+    {
+        check_ajax_referer('fetch_payment_instruments', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'You do not have permission to perform this action']);
+            return;
+        }
+
+        $this->civicrm_url = get_option('wc_civicrm_url', '');
+        $this->auth_token = get_option('wc_civicrm_auth_token', '');
+
+        $fetched = $this->get_payment_instruments();
+        if (isset($fetched['error'])) {
+            wp_send_json_error(['message' => $fetched['message']]);
+            return;
+        }
+
+        $options = [];
+        foreach ($fetched as $item) {
+            $options[] = [
+                'value' => $item['value'],
+                'label' => $item['label'] ?? ($item['name'] ?? ''),
+                'name' => $item['name'] ?? '',
+            ];
+        }
+
+        update_option('wc_civicrm_payment_instruments', $options);
+
+        wp_send_json_success([
+            'message' => 'Payment instruments refreshed successfully',
+            'instruments' => $options,
         ]);
     }
 
