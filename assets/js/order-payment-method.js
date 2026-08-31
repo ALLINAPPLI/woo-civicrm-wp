@@ -1,5 +1,6 @@
 /**
- * Formulaire admin commande : clarifie ND et retire Autre s’il n’est pas déjà choisi.
+ * Formulaire admin commande : masque ND / Autre uniquement s’ils ne sont
+ * pas déjà la valeur enregistrée (commandes historiques).
  * Le blocage completed reste côté PHP (required-payment-method.php).
  */
 jQuery(function ($) {
@@ -8,16 +9,48 @@ jQuery(function ($) {
     return;
   }
 
-  var placeholder =
-    (typeof wcCivicrmPaymentMethod !== "undefined" &&
-      wcCivicrmPaymentMethod.placeholder) ||
-    "Sélectionner un moyen de paiement";
+  var i18n = typeof wcCivicrmPaymentMethod !== "undefined" ? wcCivicrmPaymentMethod : {};
+  var placeholder = i18n.placeholder || "Sélectionner un moyen de paiement";
+  var ndLabel = i18n.ndLabel || "ND";
+  var current = $select.val();
 
-  $select.find('option[value=""]').text(placeholder);
-
-  $select.find('option[value="other"]').each(function () {
-    if (!this.selected) {
-      $(this).remove();
+  function isNewOrder() {
+    var original = $('input[name="original_post_status"]').val() || "";
+    if (original === "auto-draft" || original === "draft") {
+      return true;
     }
-  });
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("action") === "new") {
+      return true;
+    }
+    if (window.location.pathname.indexOf("post-new.php") !== -1) {
+      return true;
+    }
+    var postId =
+      $("#post_ID").val() ||
+      $('input[name="id"]').val() ||
+      params.get("id") ||
+      params.get("post");
+    return !postId || postId === "0";
+  }
+
+  // Nouvelle commande : placeholder, pas Autre. On garde value="" pour
+  // forcer un choix explicite (le PHP refuse completed tant que c’est vide).
+  if (isNewOrder()) {
+    $select.find('option[value=""]').text(placeholder);
+    $select.find('option[value="other"]').remove();
+    return;
+  }
+
+  // Commande existante : ne jamais retirer l’option actuellement enregistrée,
+  // sinon le select bascule sur la première gateway et écrase ND / Autre.
+  if (current === "") {
+    $select.find('option[value=""]').text(ndLabel);
+  } else {
+    $select.find('option[value=""]').remove();
+  }
+
+  if (current !== "other") {
+    $select.find('option[value="other"]').remove();
+  }
 });

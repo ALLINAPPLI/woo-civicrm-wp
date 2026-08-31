@@ -155,7 +155,7 @@ class WC_CiviCRM_Required_Payment_Method
     }
 
     /**
-     * Relabel ND → « Sélectionner… » et retire Autre s’il n’est pas déjà choisi.
+     * Masque ND / Autre dans le select, sauf s’ils sont déjà la valeur de la commande.
      *
      * @param string $hook
      */
@@ -175,12 +175,13 @@ class WC_CiviCRM_Required_Payment_Method
             'wc-civicrm-order-payment-method',
             plugins_url('assets/js/order-payment-method.js', __FILE__),
             ['jquery'],
-            '1.0.4',
+            '1.0.5',
             true
         );
 
         wp_localize_script('wc-civicrm-order-payment-method', 'wcCivicrmPaymentMethod', [
             'placeholder' => __('Sélectionner un moyen de paiement', 'wc-civicrm'),
+            'ndLabel'     => __('ND', 'wc-civicrm'),
         ]);
     }
 

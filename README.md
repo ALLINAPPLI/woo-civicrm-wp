@@ -172,7 +172,7 @@ Les brouillons / commandes `pending` avec ND restent possibles (ND est la valeur
 | Lots / « Marquer terminée » | Le passage en completed est annulé |
 | REST API | Erreur 400 si `status=completed` avec ND / Autre |
 | Synchro | Filet dans `handle_order_completed()` : log + note de commande |
-| Select admin | Libellé ND → « Sélectionner un moyen de paiement » ; Autre retiré s’il n’est pas déjà choisi |
+| Select admin | Nouvelle commande : placeholder, pas Autre. Commande existante : ND / Autre **conservés** s’ils sont déjà enregistrés, sinon retirés |
 
 Une fois un vrai moyen choisi (Stripe, virement, chèque, COD), passer en Terminée relance la synchro.
 
