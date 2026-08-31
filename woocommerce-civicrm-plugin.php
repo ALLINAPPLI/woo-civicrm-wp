@@ -269,6 +269,8 @@ class WooCommerceCiviCRMIntegration
         // Extract order data for contact creation
         $order_data = $this->extract_order_data($order);
         
+        error_log('message order data: ' . json_encode($order_data));
+        
         // Get or create contact
         $contact_id = $this->get_or_create_contact($order_data);
         if (!$contact_id) {

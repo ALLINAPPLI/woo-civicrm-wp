@@ -439,6 +439,10 @@ class WC_CiviCRM_Settings
                                     <td><?php $this->debug_mode_callback(); ?></td>
                                 </tr>
                             </table>
+
+                            <h2>WooCommerce Payment Methods</h2>
+                            <p>Ids machines des gateways WooCommerce (utiles pour le mapping vers <code>payment_instrument_id</code> CiviCRM).</p>
+                            <?php $this->debug_wc_payment_methods_callback(); ?>
                         </div>
                     </div>
                 </div>
@@ -636,6 +640,45 @@ class WC_CiviCRM_Settings
             <p class="description">When enabled, all API requests and responses will be logged with full details.</p>
         </div>
     <?php
+    }
+
+    /**
+     * Debug: list WooCommerce payment gateway machine ids and titles.
+     */
+    public function debug_wc_payment_methods_callback()
+    {
+        if (!function_exists('WC') || !WC()->payment_gateways()) {
+            echo '<div class="notice notice-warning inline"><p>WooCommerce ou les payment gateways sont indisponibles.</p></div>';
+            return;
+        }
+
+        $gateways = WC()->payment_gateways()->payment_gateways();
+        if (empty($gateways)) {
+            echo '<div class="notice notice-warning inline"><p>Aucune méthode de paiement WooCommerce trouvée.</p></div>';
+            return;
+        }
+        ?>
+        <div class="wc-civicrm-card">
+            <table class="wp-list-table widefat fixed striped" style="max-width:720px">
+                <thead>
+                    <tr>
+                        <th>Id machine</th>
+                        <th>Titre</th>
+                        <th>Activée</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($gateways as $id => $gateway) : ?>
+                        <tr>
+                            <td><code><?php echo esc_html($id); ?></code></td>
+                            <td><?php echo esc_html($gateway->get_title()); ?></td>
+                            <td><?php echo ($gateway->enabled === 'yes') ? 'oui' : 'non'; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php
     }
 
     public function field_mappings_callback()
