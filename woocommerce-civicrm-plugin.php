@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FORK WooCommerce to CiviCRM Integration
  * Description: FORK AIA Automatically creates CiviCRM orders from WooCommerce orders
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: Loic Moncany
  * Author URI: https://iclick.space
  * License: GPLv2 or later
@@ -24,6 +24,7 @@ require_once plugin_dir_path(__FILE__) . 'logging.php';
 require_once plugin_dir_path(__FILE__) . 'send-civicrm-request.php';
 require_once plugin_dir_path(__FILE__) . 'settings-page.php';
 require_once plugin_dir_path(__FILE__) . 'required-billing-fields.php';
+require_once plugin_dir_path(__FILE__) . 'required-payment-method.php';
 
 // Check for required plugins
 register_activation_hook(__FILE__, function () {
@@ -84,7 +85,8 @@ add_action('plugins_loaded', function () {
             $plugin_dir . 'logging.php' => 'Logging',
             $plugin_dir . 'send-civicrm-request.php' => 'API Request',
             $plugin_dir . 'settings-page.php' => 'Settings Page',
-            $plugin_dir . 'required-billing-fields.php' => 'Required Billing Fields'
+            $plugin_dir . 'required-billing-fields.php' => 'Required Billing Fields',
+            $plugin_dir . 'required-payment-method.php' => 'Required Payment Method'
         ];
 
         $missing_files = [];
@@ -105,10 +107,12 @@ add_action('plugins_loaded', function () {
         // Load settings page after trait and logger are loaded
         require_once $plugin_dir . 'settings-page.php';
         require_once $plugin_dir . 'required-billing-fields.php';
+        require_once $plugin_dir . 'required-payment-method.php';
 
         // Initialize plugin after all dependencies are loaded
         new WooCommerceCiviCRMIntegration();
         new WC_CiviCRM_Required_Billing_Fields();
+        new WC_CiviCRM_Required_Payment_Method();
     } else {
         add_action('admin_notices', function () {
             echo '<div class="error"><p>WooCommerce to CiviCRM plugin requires WooCommerce to be installed and active.</p></div>';
@@ -270,6 +274,17 @@ class WooCommerceCiviCRMIntegration
             return;
         }
 
+        $payment_method = (string) $order->get_payment_method();
+        if (WC_CiviCRM_Required_Payment_Method::is_unusable($payment_method)) {
+            $this->log_error(
+                "Synchro CiviCRM bloquée pour la commande #$order_id : moyen de paiement ND ou Autre."
+            );
+            $order->add_order_note(
+                WC_CiviCRM_Required_Payment_Method::error_message()
+            );
+            return;
+        }
+
         // Extract order data for contact creation
         $order_data = $this->extract_order_data($order);
         
@@ -288,7 +303,14 @@ class WooCommerceCiviCRMIntegration
 
         // Convertit le moyen de paiement WooCommerce (id machine) en payment_instrument_id CiviCRM
         // via l'option configurée dans l'onglet Mapping Payment.
-        $payment_instrument_id = $this->map_payment_method($order->get_payment_method());
+        $payment_instrument_id = $this->map_payment_method($payment_method);
+        if ($payment_instrument_id === null) {
+            $this->log_error(
+                "Synchro CiviCRM bloquée pour la commande #$order_id : moyen de paiement non mappable."
+            );
+            return;
+        }
+
         $contribution_data = [
             'contact_id' => (int)$contact_id,
             'financial_type_id' => (int)$financial_type_id,
@@ -345,13 +367,18 @@ class WooCommerceCiviCRMIntegration
     /**
      * Mappe un gateway WooCommerce vers un payment_instrument_id CiviCRM.
      * Source : option wc_civicrm_payment_method_map (onglet Mapping Payment).
-     * Fallback : 2 (Carte Bancaire) si aucun mapping trouvé.
+     * ND / Autre : null (la synchro est refusée en amont).
+     * Fallback : 2 (Carte Bancaire) si une vraie gateway n’est pas mappée.
      *
      * @param string $wc_payment_method Id machine WC (ex. stripe, bacs, paypal)
-     * @return int
+     * @return int|null
      */
     private function map_payment_method($wc_payment_method)
     {
+        if (WC_CiviCRM_Required_Payment_Method::is_unusable($wc_payment_method)) {
+            return null;
+        }
+
         $default = 2; // Carte Bancaire (fallback historique ASPAS)
         $payment_method_map = get_option('wc_civicrm_payment_method_map', []);
 
@@ -359,7 +386,7 @@ class WooCommerceCiviCRMIntegration
             return $default;
         }
 
-        if ($wc_payment_method !== '' && isset($payment_method_map[$wc_payment_method])) {
+        if (isset($payment_method_map[$wc_payment_method])) {
             return (int) $payment_method_map[$wc_payment_method];
         }
 

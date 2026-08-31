@@ -2,6 +2,14 @@
 
 All notable changes to the WooCommerce to CiviCRM Integration plugin will be documented in this file.
 
+## 1.0.4 - 2026-08-31
+
+### Added
+
+- Blocage du passage en `completed` (admin, lots, REST) si le moyen de paiement est ND ou Autre
+- Filet de synchro : pas de contribution CiviCRM et pas de `_civicrm_synced` dans ce cas
+- Select admin : libellé ND clarifié, option Autre masquée si inutilisée
+
 ## 1.0.1 - 2023-10-01
 
 ### Changed
