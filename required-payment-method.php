@@ -40,8 +40,6 @@ class WC_CiviCRM_Required_Payment_Method
 
         // REST API
         add_filter('woocommerce_rest_pre_insert_shop_order_object', [$this, 'validate_rest_order'], 10, 3);
-
-        add_action('admin_enqueue_scripts', [$this, 'enqueue_order_admin_script']);
     }
 
     /**
@@ -152,37 +150,6 @@ class WC_CiviCRM_Required_Payment_Method
         }
 
         throw new Exception($message);
-    }
-
-    /**
-     * Masque ND / Autre dans le select, sauf s’ils sont déjà la valeur de la commande.
-     *
-     * @param string $hook
-     */
-    public function enqueue_order_admin_script($hook)
-    {
-        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
-        if (!$screen || !in_array($screen->id, ['shop_order', 'woocommerce_page_wc-orders'], true)) {
-            return;
-        }
-
-        $path = plugin_dir_path(__FILE__) . 'assets/js/order-payment-method.js';
-        if (!file_exists($path)) {
-            return;
-        }
-
-        wp_enqueue_script(
-            'wc-civicrm-order-payment-method',
-            plugins_url('assets/js/order-payment-method.js', __FILE__),
-            ['jquery'],
-            '1.0.5',
-            true
-        );
-
-        wp_localize_script('wc-civicrm-order-payment-method', 'wcCivicrmPaymentMethod', [
-            'placeholder' => __('Sélectionner un moyen de paiement', 'wc-civicrm'),
-            'ndLabel'     => __('ND', 'wc-civicrm'),
-        ]);
     }
 
     /**

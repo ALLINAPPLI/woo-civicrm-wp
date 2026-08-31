@@ -164,7 +164,7 @@ Fichier `required-payment-method.php`. Si le staff passe la commande en **comple
 - une erreur s’affiche dans l’admin
 - la synchro CiviCRM **ne part pas** (`_civicrm_synced` n’est pas posé)
 
-Les brouillons / commandes `pending` avec ND restent possibles (ND est la valeur par défaut du formulaire).
+Le select admin **n’est pas modifié** : ND et Autre restent disponibles à l’ajout et à l’édition. Les brouillons / commandes `pending` avec ND restent possibles.
 
 | Contexte | Comportement |
 |---|---|
@@ -172,7 +172,6 @@ Les brouillons / commandes `pending` avec ND restent possibles (ND est la valeur
 | Lots / « Marquer terminée » | Le passage en completed est annulé |
 | REST API | Erreur 400 si `status=completed` avec ND / Autre |
 | Synchro | Filet dans `handle_order_completed()` : log + note de commande |
-| Select admin | Nouvelle commande : placeholder, pas Autre. Commande existante : ND / Autre **conservés** s’ils sont déjà enregistrés, sinon retirés |
 
 Une fois un vrai moyen choisi (Stripe, virement, chèque, COD), passer en Terminée relance la synchro.
 
