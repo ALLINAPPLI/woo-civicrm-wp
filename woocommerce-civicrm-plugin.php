@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FORK WooCommerce to CiviCRM Integration
  * Description: FORK AIA Automatically creates CiviCRM orders from WooCommerce orders
- * Version: 1.0.4
+ * Version: 1.0.5
  * Author: Loic Moncany
  * Author URI: https://iclick.space
  * License: GPLv2 or later
