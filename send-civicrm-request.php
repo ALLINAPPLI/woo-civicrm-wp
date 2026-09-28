@@ -190,8 +190,19 @@ trait WC_CiviCRM_API_Request
             // Ensure numeric fields are actually numbers
             if ($action === 'create' && isset($params['values'])) {
                 // Fields that should be integers
-                $int_fields = ['contact_id', 'financial_type_id', 'payment_instrument_id', 
-                               'contribution_status_id', 'is_test', 'is_pay_later'];
+                $int_fields = [
+                    'contact_id',
+                    'financial_type_id',
+                    'payment_instrument_id',
+                    'contribution_status_id',
+                    'is_test',
+                    'is_pay_later',
+                    'location_type_id',
+                    'phone_type_id',
+                    'country_id',
+                    'state_province_id',
+                    'is_primary',
+                ];
                 
                 // Fields that should be floats
                 $float_fields = ['total_amount', 'fee_amount', 'net_amount', 'non_deductible_amount'];
