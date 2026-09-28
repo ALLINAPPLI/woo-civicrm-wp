@@ -5,7 +5,7 @@ Fork du plugin [woo-civicrm-wp](https://github.com/lmoncany/woo-civicrm-wp) (Loi
 ## TL;DR
 
 - Quand une commande WooCommerce est **payée** ou passe en **completed**, le plugin crée une **contribution CiviCRM** (API4).
-- Il rattache la contribution à un **contact existant** (email, sinon prénom + nom) ou **crée** le contact.
+- Il rattache la contribution à un **contact existant** (email) ou **crée** le contact, puis Email / Adresse / Téléphone.
 - Réglages : menu WP **WC CiviCRM** → URL CiviCRM, jeton API, type financier, mapping des moyens de paiement.
 - Une commande n’est synchronisée **qu’une fois** (`_civicrm_synced`).
 
@@ -111,13 +111,14 @@ Elle est **ignorée** si :
 
 Méthode `get_or_create_contact()`. Champs WooCommerce **obligatoires** : `billing_email`, `billing_first_name`, `billing_last_name`.
 
-Ordre des recherches (égalité stricte, `limit: 1`) :
+1. **Email** — API4 `Email.get` où `email = billing_email` (`limit: 1`). Si trouvé, le `contact_id` est utilisé **sans** comparer le nom et **sans** mettre à jour le contact.
+2. **Sinon création** — API4 dans cet ordre :
+   - `Contact.create` (identité seule : `Individual` avec prénom/nom, ou `Organization` si `billing_company` est rempli)
+   - `Email.create` (toujours, clé de matching ultérieur)
+   - `Address.create` si rue, ville ou code postal est renseigné (`country_id` via ISO WooCommerce)
+   - `Phone.create` si téléphone renseigné
 
-1. **Email** — API4 `Email.get` où `email = billing_email`. Si trouvé, le `contact_id` est utilisé **sans** comparer le nom et **sans** mettre à jour le contact.
-2. **Prénom + nom** — API4 `Contact.get` où `first_name` **et** `last_name` correspondent. Aucun filtre email, aucun dédoublonnage CiviCRM.
-3. **Création** — `Organization` si `billing_company` est rempli, sinon `Individual`. Puis email (et téléphone éventuel) en requêtes séparées. Adresse de facturation jointe à la création du contact.
-
-Risque : deux homonymes → la contribution peut être rattachée au **premier** contact trouvé par nom.
+Un échec Adresse ou Téléphone est logué ; il n’annule pas la synchro. Un échec Contact ou Email arrête la synchro.
 
 ### Contribution créée
 
@@ -139,7 +140,7 @@ Si CiviCRM renvoie une *constraint violation*, un second essai part avec `financ
 
 ### Champs commande extraits (mais pas tous envoyés)
 
-`extract_order_data()` lit aussi adresse de livraison, notes, n° de commande, etc. Seuls les champs listés ci-dessus partent dans la contribution. L’adresse sert à la **création** de contact, pas à une mise à jour d’un contact existant.
+`extract_order_data()` lit aussi adresse de livraison, notes, n° de commande, etc. Seuls les champs listés ci-dessus partent dans la contribution. L’adresse et le téléphone enrichissent **uniquement** un contact **nouveau**, via `Address.create` / `Phone.create`.
 
 ## Champs de facturation obligatoires
 
@@ -187,7 +188,7 @@ Page **WC CiviCRM → Logs**.
 - Pagination : 50 lignes
 - **Clear Logs** vide tous les fichiers (nonce)
 
-Événements utiles : `contact_found_by_email`, `contact_found_by_name`, `contact_creation`, `plugin_debug`, `plugin_error`, `api_request`, `status_change`.
+Événements utiles : `contact_found_by_email`, `contact_creation`, `plugin_debug`, `plugin_error`, `api_request`, `status_change`.
 
 ## Structure
 
@@ -239,7 +240,7 @@ Classes principales :
 
 - **Aucune contribution** : vérifier URL + jeton ; onglet Testing ; logs `plugin_error`. La commande doit être payée ou `completed`.
 - **Commande déjà synchro** : meta `_civicrm_synced` = 1. La retirer pour forcer un nouvel envoi (créera une **deuxième** contribution).
-- **Mauvais contact** : matching email d’abord, puis homonyme prénom+nom. Vérifier l’email de facturation dans WooCommerce et CiviCRM.
+- **Mauvais contact** : le matching se fait uniquement par email de facturation. Vérifier que l’email WooCommerce existe déjà (ou non) dans CiviCRM.
 - **Mauvais instrument de paiement** : onglet Mapping Payment ; sinon fallback id `2` (sauf ND / Autre, refusés).
 - **Commande admin restée pending** : moyen de paiement ND ou Autre. Choisir une gateway puis passer en Terminée.
 - **Constraint violation** : second essai en type financier `1`. Vérifier le type choisi et les champs obligatoires CiviCRM.

@@ -571,10 +571,7 @@ class WooCommerceCiviCRMIntegration
             throw new Exception('CiviCRM integration is not properly configured');
         }
 
-        error_log('message order data: ' . json_encode($order_data));
-
         try {
-            // Validate required order data
             $required_order_fields = ['billing_email', 'billing_first_name', 'billing_last_name'];
             $missing_fields = array_filter($required_order_fields, function ($field) use ($order_data) {
                 return empty($order_data[$field]);
@@ -584,134 +581,16 @@ class WooCommerceCiviCRMIntegration
                 throw new Exception('Missing required fields: ' . implode(', ', $missing_fields));
             }
 
-            // Determine contact type
-            $contact_type = !empty($order_data['billing_company']) ? 'Organization' : 'Individual';
-
-            // Prepare contact data
-            $contact_data = [
-                'contact_type' => $contact_type,
-                'first_name' => $order_data['billing_first_name'],
-                'last_name' => $order_data['billing_last_name']
-            ];
-
-
-            // Search for existing contact by email first
-            // debut modif Dewy pour PRESTA ASPAS
-            $email_search_params = [
-                'select' => ['id', 'contact_id.contact_type', 'contact_id.first_name', 'contact_id.last_name', 'contact_id'],
-                'where' => [
-                    ['email', '=', $order_data['billing_email']]
-                ],
-                'limit' => 1,
-                'checkPermissions' => false
-            ];
-
-            $existing_contacts_by_email = $this->send_civicrm_request('Email', 'get', $email_search_params);
-
-            // If contact found by email, return or update
-            if (!empty($existing_contacts_by_email['values'])) {
-                $existing_contact = $existing_contacts_by_email['values'][0];
-
-                // Log found contact details
-                WC_CiviCRM_Logger::log_success('contact_found_by_email', [
-                    'message' => 'Existing contact located by email',
-                    'contact_id' => $existing_contact['contact_id'],
-                    'existing_name' => ($existing_contact['contact_id.first_name'] ?? '') . ' ' . ($existing_contact['contact_id.last_name'] ?? '')
-                ]);
-
-                //error_log('message existing contact id : ' . json_encode($existing_contact['contact_id']));
-                //error_log('message existing contact: ' . json_encode($existing_contact));
-
-                return $existing_contact['contact_id'];
-            }
-            // fin modif Dewy pour PRESTA ASPAS
-
-            // If no contact found by email, search by name
-            $name_search_params = [
-                'select' => ['id', 'contact_type', 'first_name', 'last_name'],
-                'where' => [
-                    ['first_name', '=', $order_data['billing_first_name']],
-                    ['last_name', '=', $order_data['billing_last_name']]
-                ],
-                'limit' => 1,
-                'checkPermissions' => false
-            ];
-
-            $existing_contacts_by_name = $this->send_civicrm_request('Contact', 'get', $name_search_params);
-
-            // If contact found by name, return or update
-            if (!empty($existing_contacts_by_name['values'])) {
-                $existing_contact = $existing_contacts_by_name['values'][0];
-
-                // Log found contact details
-                WC_CiviCRM_Logger::log_success('contact_found_by_name', [
-                    'message' => 'Existing contact located by name',
-                    'contact_id' => $existing_contact['id'],
-                    'existing_name' => ($existing_contact['first_name'] ?? '') . ' ' . ($existing_contact['last_name'] ?? '')
-                ]);
-
-                return $existing_contact['id'];
+            $existing_contact_id = $this->find_contact_id_by_email($order_data['billing_email']);
+            if ($existing_contact_id) {
+                return $existing_contact_id;
             }
 
-            // Create new contact first, without the email
-            $create_params = [
-                'values' => array_merge($contact_data, [
-                    // Add address if available
-                    'address' => [
-                        'street_address' => $order_data['billing_address_1'] ?? '',
-                        'supplemental_address_1' => $order_data['billing_address_2'] ?? '',
-                        'city' => $order_data['billing_city'] ?? '',
-                        'postal_code' => $order_data['billing_postcode'] ?? '',
-                        'is_primary' => 1,
-                        'location_type_id' => 1 // Typically 'Home' location type
-                    ]
-                ]),
-                'checkPermissions' => false
-            ];
+            $contact_id = $this->create_civicrm_contact($order_data);
+            $this->create_civicrm_email($contact_id, $order_data['billing_email']);
+            $this->create_civicrm_address_if_present($contact_id, $order_data);
+            $this->create_civicrm_phone_if_present($contact_id, $order_data);
 
-            // Remove null values
-            $create_params['values'] = array_filter($create_params['values']);
-
-            // Create new contact
-            $create_response = $this->send_civicrm_request('Contact', 'create', $create_params);
-
-            // Validate creation response
-            if (empty($create_response['values']) || empty($create_response['values'][0]['id'])) {
-                throw new Exception('Failed to create contact: No ID returned');
-            }
-
-            $contact_id = $create_response['values'][0]['id'];
-
-            // Now create the email in a separate request
-            $email_params = [
-                'values' => [
-                    'contact_id' => $contact_id,
-                    'email' => $order_data['billing_email'],
-                    'is_primary' => 1,
-                    'location_type_id' => 1 // Typically 'Home' location type
-                ],
-                'checkPermissions' => false
-            ];
-            
-            $email_response = $this->send_civicrm_request('Email', 'create', $email_params);
-            
-            // Create phone if available
-            if (!empty($order_data['billing_phone'])) {
-                $phone_params = [
-                    'values' => [
-                        'contact_id' => $contact_id,
-                        'phone' => $order_data['billing_phone'],
-                        'is_primary' => 1,
-                        'phone_type_id' => 1, // Typically 'Phone' type
-                        'location_type_id' => 1 // Typically 'Home' location type
-                    ],
-                    'checkPermissions' => false
-                ];
-                
-                $this->send_civicrm_request('Phone', 'create', $phone_params);
-            }
-
-            // Log new contact creation with more details
             WC_CiviCRM_Logger::log_success('contact_creation', [
                 'message' => 'New contact created',
                 'contact_id' => $contact_id,
@@ -721,7 +600,6 @@ class WooCommerceCiviCRMIntegration
 
             return $contact_id;
         } catch (Exception $e) {
-            // Comprehensive error logging
             WC_CiviCRM_Logger::log_error('contact_process_error', [
                 'message' => 'Contact processing failed',
                 'error' => $e->getMessage(),
@@ -730,6 +608,226 @@ class WooCommerceCiviCRMIntegration
 
             throw $e;
         }
+    }
+
+    /**
+     * Matching uniquement par email (API4 Email.get).
+     *
+     * @param string $email
+     * @return int|null
+     */
+    private function find_contact_id_by_email($email)
+    {
+        $result = $this->send_civicrm_request('Email', 'get', [
+            'select' => ['id', 'contact_id', 'contact_id.first_name', 'contact_id.last_name'],
+            'where' => [
+                ['email', '=', $email]
+            ],
+            'limit' => 1,
+            'checkPermissions' => false
+        ]);
+
+        if (empty($result['values'][0]['contact_id'])) {
+            return null;
+        }
+
+        $contact_id = (int) $result['values'][0]['contact_id'];
+
+        WC_CiviCRM_Logger::log_success('contact_found_by_email', [
+            'message' => 'Existing contact located by email',
+            'contact_id' => $contact_id,
+            'existing_name' => trim(
+                ($result['values'][0]['contact_id.first_name'] ?? '') . ' ' .
+                ($result['values'][0]['contact_id.last_name'] ?? '')
+            )
+        ]);
+
+        return $contact_id;
+    }
+
+    /**
+     * Crée le contact (identité seule). Email / adresse / téléphone sont des entités séparées.
+     *
+     * @param array $order_data
+     * @return int
+     */
+    private function create_civicrm_contact(array $order_data)
+    {
+        $is_organization = !empty($order_data['billing_company']);
+        $values = [
+            'contact_type' => $is_organization ? 'Organization' : 'Individual',
+        ];
+
+        if ($is_organization) {
+            $values['organization_name'] = $order_data['billing_company'];
+        } else {
+            $values['first_name'] = $order_data['billing_first_name'];
+            $values['last_name'] = $order_data['billing_last_name'];
+        }
+
+        return $this->create_civicrm_entity('Contact', $values);
+    }
+
+    /**
+     * @param int    $contact_id
+     * @param string $email
+     */
+    private function create_civicrm_email($contact_id, $email)
+    {
+        $this->create_civicrm_entity('Email', [
+            'contact_id' => (int) $contact_id,
+            'email' => $email,
+            'is_primary' => 1,
+            'location_type_id' => 1,
+        ]);
+    }
+
+    /**
+     * @param int   $contact_id
+     * @param array $order_data
+     */
+    private function create_civicrm_address_if_present($contact_id, array $order_data)
+    {
+        $has_address = !empty($order_data['billing_address_1'])
+            || !empty($order_data['billing_city'])
+            || !empty($order_data['billing_postcode']);
+
+        if (!$has_address) {
+            return;
+        }
+
+        $values = [
+            'contact_id' => (int) $contact_id,
+            'is_primary' => 1,
+            'location_type_id' => 1,
+        ];
+
+        if (!empty($order_data['billing_address_1'])) {
+            $values['street_address'] = $order_data['billing_address_1'];
+        }
+        if (!empty($order_data['billing_address_2'])) {
+            $values['supplemental_address_1'] = $order_data['billing_address_2'];
+        }
+        if (!empty($order_data['billing_city'])) {
+            $values['city'] = $order_data['billing_city'];
+        }
+        if (!empty($order_data['billing_postcode'])) {
+            $values['postal_code'] = $order_data['billing_postcode'];
+        }
+
+        $country_id = $this->resolve_country_id($order_data['billing_country'] ?? '');
+        if ($country_id) {
+            $values['country_id'] = $country_id;
+            $state_id = $this->resolve_state_province_id($order_data['billing_state'] ?? '', $country_id);
+            if ($state_id) {
+                $values['state_province_id'] = $state_id;
+            }
+        }
+
+        try {
+            $this->create_civicrm_entity('Address', $values);
+        } catch (Exception $e) {
+            $this->log_error('Failed to create address for contact #' . $contact_id . ': ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @param int   $contact_id
+     * @param array $order_data
+     */
+    private function create_civicrm_phone_if_present($contact_id, array $order_data)
+    {
+        if (empty($order_data['billing_phone'])) {
+            return;
+        }
+
+        try {
+            $this->create_civicrm_entity('Phone', [
+                'contact_id' => (int) $contact_id,
+                'phone' => $order_data['billing_phone'],
+                'is_primary' => 1,
+                'phone_type_id' => 1,
+                'location_type_id' => 1,
+            ]);
+        } catch (Exception $e) {
+            $this->log_error('Failed to create phone for contact #' . $contact_id . ': ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @param string $iso_code Code ISO WooCommerce (ex. FR)
+     * @return int|null
+     */
+    private function resolve_country_id($iso_code)
+    {
+        $iso_code = strtoupper(trim((string) $iso_code));
+        if ($iso_code === '') {
+            return null;
+        }
+
+        $result = $this->send_civicrm_request('Country', 'get', [
+            'select' => ['id'],
+            'where' => [
+                ['iso_code', '=', $iso_code]
+            ],
+            'limit' => 1,
+            'checkPermissions' => false
+        ]);
+
+        if (empty($result['values'][0]['id'])) {
+            return null;
+        }
+
+        return (int) $result['values'][0]['id'];
+    }
+
+    /**
+     * @param string $abbreviation Code état/région WooCommerce
+     * @param int    $country_id
+     * @return int|null
+     */
+    private function resolve_state_province_id($abbreviation, $country_id)
+    {
+        $abbreviation = trim((string) $abbreviation);
+        if ($abbreviation === '' || !$country_id) {
+            return null;
+        }
+
+        $result = $this->send_civicrm_request('StateProvince', 'get', [
+            'select' => ['id'],
+            'where' => [
+                ['abbreviation', '=', $abbreviation],
+                ['country_id', '=', (int) $country_id]
+            ],
+            'limit' => 1,
+            'checkPermissions' => false
+        ]);
+
+        if (empty($result['values'][0]['id'])) {
+            return null;
+        }
+
+        return (int) $result['values'][0]['id'];
+    }
+
+    /**
+     * @param string $entity
+     * @param array  $values
+     * @return int
+     */
+    private function create_civicrm_entity($entity, array $values)
+    {
+        $result = $this->send_civicrm_request($entity, 'create', [
+            'values' => $values,
+            'checkPermissions' => false
+        ]);
+
+        if (!$result || isset($result['error_message']) || empty($result['values'][0]['id'])) {
+            $error = isset($result['error_message']) ? $result['error_message'] : 'No ID returned';
+            throw new Exception("Failed to create {$entity}: {$error}");
+        }
+
+        return (int) $result['values'][0]['id'];
     }
 
 
