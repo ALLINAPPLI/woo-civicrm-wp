@@ -389,8 +389,8 @@ class WC_CiviCRM_Settings
                 <div class="wc-civicrm-tabs-wrapper">
                     <nav class="wc-civicrm-tabs">
                         <button type="button" class="wc-civicrm-tab-button active" data-tab="tab-connection">Connection</button>
-                        <button type="button" class="wc-civicrm-tab-button" data-tab="tab-mappings">Field Mappings</button>
-                        <button type="button" class="wc-civicrm-tab-button" data-tab="tab-payment-mapping">Mapping Payment</button>
+                        <button type="button" class="wc-civicrm-tab-button" data-tab="tab-mappings">Fields Mapping</button>
+                        <button type="button" class="wc-civicrm-tab-button" data-tab="tab-payment-mapping">Payment instrument Mapping</button>
                         <button type="button" class="wc-civicrm-tab-button" data-tab="tab-contribution">Contribution</button>
                         <button type="button" class="wc-civicrm-tab-button" data-tab="tab-testing">Testing</button>
                         <button type="button" class="wc-civicrm-tab-button" data-tab="tab-debug">Debug</button>
@@ -434,7 +434,7 @@ class WC_CiviCRM_Settings
                     <!-- Second tab: Field Mappings -->
                     <div id="tab-mappings" class="wc-civicrm-tab-content">
                         <div class="wc-civicrm-section">
-                            <h2>Field Mappings</h2>
+                            <h2>Fields Mapping</h2>
                             <?php $this->field_mappings_callback(); ?>
                         </div>
                     </div>
@@ -442,7 +442,7 @@ class WC_CiviCRM_Settings
                     <!-- Onglet : mapping gateway WooCommerce ↔ instrument de paiement CiviCRM -->
                     <div id="tab-payment-mapping" class="wc-civicrm-tab-content">
                         <div class="wc-civicrm-section">
-                            <h2>Mapping Payment</h2>
+                            <h2>Payment instrument mapping</h2>
                             <p>Associez chaque moyen de paiement WooCommerce activé à un instrument de paiement CiviCRM.</p>
                             <?php $this->payment_method_mappings_callback(); ?>
                         </div>
@@ -451,7 +451,7 @@ class WC_CiviCRM_Settings
                     <!-- Contribution Settings -->
                     <div id="tab-contribution" class="wc-civicrm-tab-content">
                         <div class="wc-civicrm-section">
-                            <h2>CiviCRM Contribution Settings</h2>
+                            <h2>CiviCRM Contribution Mapping</h2>
                             <p>Configure how WooCommerce orders are mapped to CiviCRM contributions.</p>
                             
                             <table class="form-table">
@@ -859,8 +859,7 @@ class WC_CiviCRM_Settings
     ?>
         <div class="wc-civicrm-field-mappings-wrapper">
             <div class="field-mappings-header">
-                <h3>Field Mappings</h3>
-                <p>Map WooCommerce fields to CiviCRM fields. Use the button below to fetch available fields from CiviCRM.</p>
+                <p>Maps WooCommerce fields to CiviCRM fields. Use the button below to fetch available fields from CiviCRM.</p>
                 <div class="field-mappings-actions">
                     <button type="button" id="fetch-fields" class="button button-secondary">
                         <span class="dashicons dashicons-update"></span> Fetch Available Fields
