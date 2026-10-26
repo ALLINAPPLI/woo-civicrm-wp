@@ -121,24 +121,16 @@ class WC_CiviCRM_Settings
             return;
         }
 
-        // Define plugin directory with fallback for file structure
-        $plugin_url = plugin_dir_url(__FILE__);
-        
-        // Check if we're inside a subdirectory
-        if (strpos($plugin_url, '/wp-content/plugins/woo-civicrm-wp/') === false) {
-            $plugin_url = plugin_dir_url(dirname(__FILE__));
-        }
-
         wp_enqueue_style(
             'wc-civicrm-admin-styles',
-            $plugin_url . 'assets/css/admin-styles.css',
+            plugins_url('assets/css/admin-styles.css', __FILE__),
             [],
             '1.0'
         );
 
         wp_enqueue_script(
             'wc-civicrm-admin-scripts',
-            $plugin_url . 'assets/js/admin-scripts.js',
+            plugins_url('assets/js/admin-scripts.js', __FILE__),
             ['jquery'],
             '1.1',
             true
