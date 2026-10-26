@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: FORK WooCommerce to CiviCRM Integration
- * Description: FORK AIA Automatically creates CiviCRM orders from WooCommerce orders
+ * Plugin Name: WooCommerce to CiviCRM Integration
+ * Description: Automatically creates CiviCRM orders from WooCommerce orders
  * Version: 1.0.6
  * Author: GESTAD
  * Author URI: https://gestad.fr/
